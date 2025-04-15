@@ -79,7 +79,7 @@ class CNNBiLSTM(nn.Module):
         x, _ = self.lstm(x)
         x = self.fc(x[:, -1, :])
         return x
-# data = EmoDataset("https://drive.google.com/file/d/1Bvi3zwadK4VYYIvdZLHirrZtBle5H6pc/view?usp=sharing")
+# data = EmoDataset("https://drive.google.com/file/d/1DEdFgQabDmTOEw4Lzr-fq60OjOETtO-4/view?usp=sharing")
 import gdown
 import os
 
