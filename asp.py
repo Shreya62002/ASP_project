@@ -79,7 +79,27 @@ class CNNBiLSTM(nn.Module):
         x, _ = self.lstm(x)
         x = self.fc(x[:, -1, :])
         return x
-data = EmoDataset("https://drive.google.com/file/d/1Bvi3zwadK4VYYIvdZLHirrZtBle5H6pc/view?usp=sharing")
+# data = EmoDataset("https://drive.google.com/file/d/1Bvi3zwadK4VYYIvdZLHirrZtBle5H6pc/view?usp=sharing")
+import gdown
+import os
+
+# Google Drive file ID
+file_id = "1Bvi3zwadK4VYYIvdZLHirrZtBle5H6pc"
+output = "dataset.zip"  # or whatever the filename is
+
+# Download file
+if not os.path.exists(output):
+    gdown.download(f"https://drive.google.com/uc?id={file_id}", output, quiet=False)
+
+# If it's a zip, extract it
+import zipfile
+if output.endswith(".zip"):
+    with zipfile.ZipFile(output, 'r') as zip_ref:
+        zip_ref.extractall("dataset_folder")  # replace with desired path
+
+# Now you can load your dataset from the extracted folder
+# Example:
+data = EmoDataset("dataset_folder")
 n_train = int(0.8 * len(data))
 n_val = len(data) - n_train
 train_set, val_set = random_split(data, [n_train, n_val])
