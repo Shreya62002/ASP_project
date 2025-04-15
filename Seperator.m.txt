@@ -1,0 +1,28 @@
+clc;
+clear all;
+close all;
+
+[audio_Atharva, Fs] = audioread('Atharva_Mixed.flac');
+[audio_Kartik, ~] = audioread('Kartik_Mixed.flac');
+[audio_Pranav, ~] = audioread('Pranav_Mixed.flac');
+
+
+n_s = min([length(audio_Atharva), length(audio_Kartik), length(audio_Pranav)]);
+audio_Atharva = audio_Atharva(1:n_s);
+audio_Kartik = audio_Kartik(1:n_s);
+audio_Pranav = audio_Pranav(1:n_s);
+
+
+Z = [audio_Atharva'; audio_Kartik'; audio_Pranav'];
+
+
+num_src = 3;
+[Zica, ~, ~, ~] = fastICA(Z, num_src);
+
+
+Zica = Zica ./ max(abs(Zica), [], 2);
+
+
+audiowrite('Real/Seperated_1.flac', Zica(1,:)', Fs);
+audiowrite('Real/Seperated_2.flac', Zica(2,:)', Fs);
+audiowrite('Real/Seperated_3.flac', Zica(3,:)', Fs);
