@@ -82,23 +82,46 @@ class CNNBiLSTM(nn.Module):
 # data = EmoDataset("https://drive.google.com/file/d/1DEdFgQabDmTOEw4Lzr-fq60OjOETtO-4/view?usp=sharing")
 import gdown
 import os
-
-# Google Drive file ID
-file_id = "1Bvi3zwadK4VYYIvdZLHirrZtBle5H6pc"
-output = "dataset.zip"  # or whatever the filename is
-
-# Download file
-if not os.path.exists(output):
-    gdown.download(f"https://drive.google.com/uc?id={file_id}", output, quiet=False)
-
-# If it's a zip, extract it
+import gdown
+import os
 import zipfile
-if output.endswith(".zip"):
-    with zipfile.ZipFile(output, 'r') as zip_ref:
-        zip_ref.extractall("dataset_folder")  # replace with desired path
 
-# Now you can load your dataset from the extracted folder
-# Example:
+file_id = "1Bvi3zwadK4VYYIvdZLHirrZtBle5H6pc"
+output = "dataset.zip"
+
+# Download if not already
+if not os.path.exists(output):
+    gdown.download(f"https://drive.google.com/uc?id={file_id}&confirm=t", output, quiet=False, fuzzy=True)
+
+# Check if it's really a zip
+with open(output, 'rb') as f:
+    sig = f.read(4)
+    print("File signature:", sig)  # Expecting: b'PK\x03\x04'
+
+# If valid, extract
+if sig == b'PK\x03\x04':
+    with zipfile.ZipFile(output, 'r') as zip_ref:
+        zip_ref.extractall("dataset_folder")
+    print("✅ Extraction complete.")
+else:
+    print("❌ Not a valid ZIP file.")
+
+# # Google Drive file ID
+# file_id = "1Bvi3zwadK4VYYIvdZLHirrZtBle5H6pc"
+# output = "dataset.zip"  # or whatever the filename is
+
+# # Download file
+# if not os.path.exists(output):
+#     gdown.download(f"https://drive.google.com/uc?id={file_id}", output, quiet=False)
+
+# # If it's a zip, extract it
+# import zipfile
+# if output.endswith(".zip"):
+#     with zipfile.ZipFile(output, 'r') as zip_ref:
+#         zip_ref.extractall("dataset_folder")  # replace with desired path
+
+# # Now you can load your dataset from the extracted folder
+# # Example:
 data = EmoDataset("dataset_folder")
 n_train = int(0.8 * len(data))
 n_val = len(data) - n_train
