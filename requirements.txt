@@ -8,5 +8,3 @@ seaborn
 gdown
 flask
 flask_cors
-uuid
-base64
