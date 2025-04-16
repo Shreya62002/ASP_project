@@ -75,7 +75,7 @@ emotion_dict = {
 }
 
 # Helper functions
-def predict_emotion(audio_path, sample_rate=16000, n_mels=64, max_len=300):
+def predict_emotion(audio_path, sample_rate=48000, n_mels=64, max_len=300):
     """Predict emotion from audio file"""
     try:
         wf, sr = torchaudio.load(audio_path)
