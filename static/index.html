@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -574,6 +574,715 @@
             const mockAudioBlob = new Blob([], { type: 'audio/wav' });
             handleFileSelect(mockAudioBlob);
         });
+        
+        function updateRecordingTimer() {
+            const minutes = Math.floor(recordingTime / 60).toString().padStart(2, '0');
+            const seconds = (recordingTime % 60).toString().padStart(2, '0');
+            recordTimer.textContent = `${minutes}:${seconds}`;
+        }
+        
+        function simulateRecordingWaveform() {
+            const waveform = document.getElementById('recording-waveform');
+            waveform.innerHTML = '';
+            
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('height', '100%');
+            svg.setAttribute('viewBox', '0 0 1000 100');
+            
+            const pathElement = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            pathElement.setAttribute('stroke', '#e63946');
+            pathElement.setAttribute('stroke-width', '2');
+            pathElement.setAttribute('fill', 'none');
+            
+            svg.appendChild(pathElement);
+            waveform.appendChild(svg);
+            
+            let x = 0;
+            const liveWaveformInterval = setInterval(() => {
+                if (!recording) {
+                    clearInterval(liveWaveformInterval);
+                    return;
+                }
+                
+                // Update the path data to simulate a live waveform
+                let path = pathElement.getAttribute('d') || 'M0,50 ';
+                const amplitude = Math.random() * 40 + 10;
+                const y = 50 + Math.sin(x/10) * amplitude;
+                
+                path += `L${x},${y} `;
+                pathElement.setAttribute('d', path);
+                
+                x += 5;
+                if (x > 1000) {
+                    // Reset when we reach the end
+                    x = 0;
+                    pathElement.setAttribute('d', 'M0,50 ');
+                }
+            }, 50);
+        }
+        
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check if audio recording is supported
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                recordBtn.disabled = true;
+                recordBtn.title = 'Audio recording is not supported in your browser';
+            }
+        });
+    </script>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Emotion Recognition & Enhancement</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            margin: 0;
+            font-size: 2.5rem;
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .upload-container {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-container:hover, .upload-container.dragover {
+            border-color: #667eea;
+            background-color: rgba(102, 126, 234, 0.05);
+        }
+        
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: #764ba2;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.8rem 1.8rem;
+            font-size: 1rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 0.5rem;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-outline {
+            background: transparent;
+            border: 2px solid #667eea;
+            color: #667eea;
+        }
+        
+        .btn-outline:hover {
+            background: rgba(102, 126, 234, 0.1);
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .result-section {
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            height: 0;
+            overflow: hidden;
+        }
+        
+        .result-section.active {
+            opacity: 1;
+            height: auto;
+            margin-top: 2rem;
+        }
+        
+        .emotion-result {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        
+        .emotion-label {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 1rem 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .audio-controls {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 1rem 0;
+        }
+        
+        .audio-label {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .waveform {
+            width: 100%;
+            height: 120px;
+            margin: 1rem 0;
+            background: #f0f2f5;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .comparison {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+        
+        .comparison-item {
+            flex: 1;
+            min-width: 300px;
+        }
+        
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #764ba2;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 2rem auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 1rem;
+            }
+            
+            .card {
+                padding: 1.5rem;
+            }
+        }
+        
+        .emotion-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        
+        .neutral { color: #8e9aaf; }
+        .calm { color: #a8dadc; }
+        .happy { color: #ffd166; }
+        .sad { color: #457b9d; }
+        .angry { color: #e63946; }
+        .fearful { color: #9d4edd; }
+        .disgust { color: #6a994e; }
+        .surprised { color: #f72585; }
+        
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            background: #f0f2f5;
+            margin-top: 3rem;
+        }
+        
+        .features {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 2rem 0;
+            gap: 1rem;
+        }
+        
+        .feature-item {
+            flex: 1;
+            min-width: 250px;
+            padding: 1.5rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            text-align: center;
+        }
+        
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Speech Emotion Recognition & Enhancement</h1>
+        <p class="subtitle">Analyze and transform speech based on emotional content</p>
+    </header>
+    
+    <div class="container">
+        <div class="card">
+            <h2>Upload Audio</h2>
+            <input type="file" id="audio-upload" accept="audio/*" class="hidden">
+            <div class="upload-container" id="drop-area">
+                <div class="upload-icon">🎙️</div>
+                <p>Drag & drop your audio file here or click to browse</p>
+                <p class="subtitle">Supports WAV, MP3, FLAC (max 10MB)</p>
+            </div>
+            <div class="text-center">
+                <button id="upload-btn" class="btn">Upload Audio</button>
+                <button id="record-btn" class="btn btn-outline">Record Audio</button>
+            </div>
+        </div>
+        
+        <div id="recording-section" class="card hidden">
+            <h2>Record Audio</h2>
+            <div class="text-center">
+                <div id="record-timer">00:00</div>
+                <button id="start-record" class="btn">Start Recording</button>
+                <button id="stop-record" class="btn btn-outline hidden">Stop Recording</button>
+                <div id="recording-waveform" class="waveform"></div>
+            </div>
+        </div>
+        
+        <div id="processing" class="hidden">
+            <div class="loader"></div>
+            <p class="text-center">Processing your audio...</p>
+        </div>
+        
+        <div id="results" class="result-section">
+            <div class="card">
+                <h2>Analysis Results</h2>
+                <div class="emotion-result">
+                    <div id="emotion-icon" class="emotion-icon">😐</div>
+                    <p>Detected Emotion:</p>
+                    <div id="emotion-name" class="emotion-label">Neutral</div>
+                    <p id="emotion-description">This speech has a neutral emotional tone.</p>
+                </div>
+                
+                <div class="audio-controls">
+                    <p class="audio-label">Original Audio</p>
+                    <audio id="original-audio" controls></audio>
+                    <div id="original-waveform" class="waveform"></div>
+                </div>
+                
+                <h3>Enhanced Audio</h3>
+                <div class="comparison">
+                    <div class="comparison-item">
+                        <p class="audio-label">Emotion Enhanced</p>
+                        <audio id="enhanced-audio" controls></audio>
+                        <div id="enhanced-waveform" class="waveform"></div>
+                    </div>
+                    <div class="comparison-item">
+                        <p class="audio-label">NLMS Enhanced</p>
+                        <audio id="nlms-audio" controls></audio>
+                        <div id="nlms-waveform" class="waveform"></div>
+                    </div>
+                </div>
+                
+                <div class="text-center" style="margin-top: 2rem;">
+                    <button id="download-original" class="btn btn-outline">Download Original</button>
+                    <button id="download-enhanced" class="btn">Download Enhanced</button>
+                    <button id="download-nlms" class="btn btn-outline">Download NLMS</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>About This Application</h2>
+            <p>This web application uses deep learning to recognize emotions in speech and enhance audio based on the detected emotion. The system is based on a CNN-BiLSTM architecture trained on the RAVDESS emotional speech dataset.</p>
+            
+            <div class="features">
+                <div class="feature-item">
+                    <div class="feature-icon">🔍</div>
+                    <h3>Emotion Recognition</h3>
+                    <p>Detects 8 different emotions in speech including neutral, happy, sad, angry, fearful, disgust, surprised, and calm.</p>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">✨</div>
+                    <h3>Audio Enhancement</h3>
+                    <p>Applies emotion-specific audio enhancement techniques to transform the emotional characteristics of speech.</p>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">📊</div>
+                    <h3>Visualization</h3>
+                    <p>View waveform visualizations to compare differences between original and enhanced audio.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <footer>
+        <p>Speech Emotion Recognition & Enhancement App © 2025</p>
+    </footer>
+
+    <script>
+        // Elements
+        const dropArea = document.getElementById('drop-area');
+        const fileInput = document.getElementById('audio-upload');
+        const uploadBtn = document.getElementById('upload-btn');
+        const recordBtn = document.getElementById('record-btn');
+        const recordingSection = document.getElementById('recording-section');
+        const startRecordBtn = document.getElementById('start-record');
+        const stopRecordBtn = document.getElementById('stop-record');
+        const recordTimer = document.getElementById('record-timer');
+        const processingSection = document.getElementById('processing');
+        const resultsSection = document.getElementById('results');
+        
+        // Emotion mapping
+        const emotionData = {
+            neutral: { icon: "😐", description: "This speech has a neutral emotional tone with balanced characteristics." },
+            calm: { icon: "😌", description: "This speech has a calm emotional tone, expressing tranquility and peacefulness." },
+            happy: { icon: "😄", description: "This speech has a happy emotional tone, expressing joy and positivity." },
+            sad: { icon: "😢", description: "This speech has a sad emotional tone, expressing sorrow or melancholy." },
+            angry: { icon: "😠", description: "This speech has an angry emotional tone, expressing frustration or rage." },
+            fearful: { icon: "😨", description: "This speech has a fearful emotional tone, expressing anxiety or worry." },
+            disgust: { icon: "🤢", description: "This speech has a tone of disgust, expressing aversion or repulsion." },
+            surprised: { icon: "😲", description: "This speech has a surprised emotional tone, expressing astonishment." }
+        };
+        
+        // API endpoint for processing audio
+        const API_PROCESS_AUDIO = '/api/process-audio';
+        const API_RECORD_AUDIO = '/api/record-audio';
+        
+        // Handle file upload with real API
+        function handleFileSelect(file) {
+            if (!file || !file.type.startsWith('audio/')) {
+                alert('Please select a valid audio file');
+                return;
+            }
+            
+            if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                alert('File size exceeds 10MB limit');
+                return;
+            }
+            
+            processingSection.classList.remove('hidden');
+            resultsSection.classList.remove('active');
+            
+            // Create form data for file upload
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Process the audio file with actual API
+            fetch(API_PROCESS_AUDIO, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(result => {
+                updateResults(result);
+                processingSection.classList.add('hidden');
+                resultsSection.classList.add('active');
+            })
+            .catch(error => {
+                console.error('Error processing audio:', error);
+                alert('Error processing audio. Please try again.');
+                processingSection.classList.add('hidden');
+            });
+        }
+        
+        // Update the results section with analysis data
+        function updateResults(result) {
+            const emotionIcon = document.getElementById('emotion-icon');
+            const emotionName = document.getElementById('emotion-name');
+            const emotionDescription = document.getElementById('emotion-description');
+            const originalAudio = document.getElementById('original-audio');
+            const enhancedAudio = document.getElementById('enhanced-audio');
+            const nlmsAudio = document.getElementById('nlms-audio');
+            
+            const emotion = result.emotion;
+            
+            // Update emotion information
+            emotionIcon.textContent = emotionData[emotion].icon;
+            emotionName.textContent = emotion.charAt(0).toUpperCase() + emotion.slice(1);
+            emotionDescription.textContent = emotionData[emotion].description;
+            
+            // Add emotion class for color
+            emotionName.className = 'emotion-label ' + emotion;
+            
+            // Update audio sources - using the direct URLs from the API response
+            originalAudio.src = result.originalAudio;
+            enhancedAudio.src = result.enhancedAudio;
+            nlmsAudio.src = result.nlmsAudio;
+            
+            // Setup download buttons
+            document.getElementById('download-original').onclick = () => downloadAudio(result.originalAudio);
+            document.getElementById('download-enhanced').onclick = () => downloadAudio(result.enhancedAudio);
+            document.getElementById('download-nlms').onclick = () => downloadAudio(result.nlmsAudio);
+            
+            // Load and visualize waveforms when audio is loaded
+            originalAudio.onloadeddata = () => createWaveform('original-waveform');
+            enhancedAudio.onloadeddata = () => createWaveform('enhanced-waveform');
+            nlmsAudio.onloadeddata = () => createWaveform('nlms-waveform');
+        }
+        
+        // Simple waveform visualization (could be replaced with wavesurfer.js for production)
+        function createWaveform(elementId) {
+            const waveform = document.getElementById(elementId);
+            waveform.innerHTML = '';
+            
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('height', '100%');
+            svg.setAttribute('viewBox', '0 0 1000 100');
+            
+            // Create a waveform pattern (for demo - would be real waveform in production)
+            let path = 'M0,50 ';
+            for (let i = 1; i < 1000; i += 5) {
+                const y = 50 + Math.random() * 40 - 20;
+                path += `L${i},${y} `;
+            }
+            
+            const pathElement = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            pathElement.setAttribute('d', path);
+            pathElement.setAttribute('stroke', '#764ba2');
+            pathElement.setAttribute('stroke-width', '2');
+            pathElement.setAttribute('fill', 'none');
+            
+            svg.appendChild(pathElement);
+            waveform.appendChild(svg);
+        }
+        
+        // Helper function to download audio
+        function downloadAudio(url, filename = null) {
+            // Extract filename from URL if not provided
+            if (!filename) {
+                const urlParts = url.split('/');
+                filename = urlParts[urlParts.length - 1];
+            }
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+        
+        // Event listeners for drag and drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            dropArea.classList.add('dragover');
+        }
+        
+        function unhighlight() {
+            dropArea.classList.remove('dragover');
+        }
+        
+        dropArea.addEventListener('drop', handleDrop, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const file = dt.files[0];
+            handleFileSelect(file);
+        }
+        
+        // Click events
+        dropArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                handleFileSelect(fileInput.files[0]);
+            }
+        });
+        
+        uploadBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        recordBtn.addEventListener('click', () => {
+            recordingSection.classList.toggle('hidden');
+        });
+        
+        // Audio recording functionality with MediaRecorder API
+        let mediaRecorder;
+        let audioChunks = [];
+        let recording = false;
+        let recordingTime = 0;
+        let recordingInterval;
+        
+        startRecordBtn.addEventListener('click', () => {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(stream => {
+                        startRecordBtn.classList.add('hidden');
+                        stopRecordBtn.classList.remove('hidden');
+                        recording = true;
+                        recordingTime = 0;
+                        updateRecordingTimer();
+                        
+                        // Clear previous recording
+                        audioChunks = [];
+                        
+                        // Setup media recorder
+                        mediaRecorder = new MediaRecorder(stream);
+                        mediaRecorder.ondataavailable = event => {
+                            audioChunks.push(event.data);
+                        };
+                        
+                        mediaRecorder.onstop = () => {
+                            // Combine chunks into a single blob
+                            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                            
+                            // Create a file from the blob for upload
+                            const file = new File([audioBlob], "recording.wav", { 
+                                type: 'audio/wav' 
+                            });
+                            
+                            // Process the recording
+                            handleRecordedAudio(file);
+                            
+                            // Stop all tracks in the stream
+                            stream.getTracks().forEach(track => track.stop());
+                        };
+                        
+                        // Start recording
+                        mediaRecorder.start();
+                        
+                        // Update timer
+                        recordingInterval = setInterval(() => {
+                            recordingTime++;
+                            updateRecordingTimer();
+                        }, 1000);
+                        
+                        // Simulate recording waveform
+                        simulateRecordingWaveform();
+                    })
+                    .catch(err => {
+                        alert('Error accessing microphone: ' + err.message);
+                        console.error('Error accessing microphone:', err);
+                    });
+            } else {
+                alert('Audio recording is not supported in your browser');
+            }
+        });
+        
+        stopRecordBtn.addEventListener('click', () => {
+            if (mediaRecorder && recording) {
+                stopRecordBtn.classList.add('hidden');
+                startRecordBtn.classList.remove('hidden');
+                recording = false;
+                clearInterval(recordingInterval);
+                
+                // Stop recording
+                mediaRecorder.stop();
+            }
+        });
+        
+        function handleRecordedAudio(file) {
+            // Create form data for file upload
+            const formData = new FormData();
+            formData.append('audio', file);
+            
+            // Show processing
+            processingSection.classList.remove('hidden');
+            
+            // Send to API
+            fetch(API_RECORD_AUDIO, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(result => {
+                updateResults(result);
+                processingSection.classList.add('hidden');
+                resultsSection.classList.add('active');
+                recordingSection.classList.add('hidden');
+            })
+            .catch(error => {
+                console.error('Error processing recorded audio:', error);
+                alert('Error processing recorded audio. Please try again.');
+                processingSection.classList.add('hidden');
+            });
+        }
         
         function updateRecordingTimer() {
             const minutes = Math.floor(recordingTime / 60).toString().padStart(2, '0');
