@@ -1,4 +1,4 @@
-# app.py
+
 import os
 import io
 import torch
@@ -13,7 +13,7 @@ from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 import uuid
 import base64
-
+import traceback
 # Configure Flask app
 app = Flask(__name__, static_folder='static')
 CORS(app)  # Enable cross-origin requests for API
@@ -55,7 +55,8 @@ class CNNBiLSTM(nn.Module):
 # Load the model
 model = CNNBiLSTM().to(device)
 try:
-    model.load_state_dict(torch.load("emotion_classifier.pth", map_location=device))
+    # Add weights_only=True parameter to match training notebook's loading method
+    model.load_state_dict(torch.load("emotion_classifier.pth", map_location=device, weights_only=True))
     model.eval()
     print("Model loaded successfully!")
 except Exception as e:
@@ -73,12 +74,25 @@ emotion_dict = {
     6: "disgust",
     7: "surprised"
 }
-
-# Helper functions
-def predict_emotion(audio_path, sample_rate=48000, n_mels=64, max_len=300):
+def predict_emotion(audio_path, sample_rate=16000, n_mels=64, max_len=300):
     """Predict emotion from audio file"""
     try:
-        wf, sr = torchaudio.load(audio_path)
+        # Try loading the audio file
+        try:
+            wf, sr = torchaudio.load(audio_path)
+        except Exception as audio_load_error:
+            print(f"torchaudio failed to load: {audio_load_error}")
+            # Fallback to librosa
+            try:
+                sig, sr = librosa.load(audio_path, sr=sample_rate)
+                wf = torch.FloatTensor(sig).unsqueeze(0)
+            except Exception as librosa_error:
+                print(f"librosa also failed to load: {librosa_error}")
+                # Create a default waveform if both loading methods fail
+                wf = torch.zeros(1, sample_rate)  # 1 second of silence
+                sr = sample_rate
+
+        # Resample if needed
         wf = torchaudio.transforms.Resample(sr, sample_rate)(wf)
         wf = wf.mean(dim=0)
 
@@ -99,12 +113,11 @@ def predict_emotion(audio_path, sample_rate=48000, n_mels=64, max_len=300):
         return pred, wf, sample_rate
     except Exception as e:
         print(f"Error predicting emotion: {e}")
-        # Return neutral as fallback
-        return 0, wf, sample_rate
-
-
-def nlms(x, d, mu=0.05, order=32, eps=1e-6):
-    """Normalized Least Mean Square filter"""
+        # Create a default waveform and return neutral as fallback
+        default_wf = torch.zeros(sample_rate)  # 1 second of silence
+        return 0, default_wf, sample_rate  # Return neutral as fallback
+def nlms(x, d, mu=1.0, order=32, eps=1e-6):
+    """Normalized Least Mean Square filter with updated mu parameter to match training notebook"""
     n = len(x)
     y = np.zeros(n)
     e = np.zeros(n)
@@ -130,24 +143,28 @@ def enhance(wave, sr, emo_id):
     eng = np.square(sig)
     cent = librosa.feature.spectral_centroid(y=sig, sr=sr)[0]
 
+    # Add null checks to avoid division by zero
     zcr_n = zcr / np.max(zcr) if np.max(zcr) > 0 else zcr
     eng_n = eng / np.max(eng) if np.max(eng) > 0 else eng
     cent_n = cent / np.max(cent) if np.max(cent) > 0 else cent
 
     if emo == "sad":
-        slow = librosa.effects.time_stretch(sig, rate=0.8)
-        out = librosa.effects.pitch_shift(slow, sr=sr, n_steps=-2)
+        # Update parameters to match training notebook
+        slow = librosa.effects.time_stretch(sig, rate=0.6)
+        out = librosa.effects.pitch_shift(slow, sr=sr, n_steps=-3)
         out = out[:len(sig)] if len(out) > len(sig) else np.pad(out, (0, len(sig) - len(out)), mode='reflect')
 
     elif emo == "happy":
         t = np.linspace(0, len(sig) / sr, len(sig))
-        mod = 0.2 * np.sin(2 * np.pi * 6 * t)
+        # Update modulation depth to match training
+        mod = 0.3 * np.sin(2 * np.pi * 6 * t)
         vib = sig * (1 + mod)
         out = librosa.effects.pitch_shift(vib, sr=sr, n_steps=1)
         out = out[:len(sig)] if len(out) > len(sig) else np.pad(out, (0, len(sig) - len(out)), mode='reflect')
 
     elif emo == "angry":
-        out = librosa.effects.pitch_shift(sig, sr=sr, n_steps=2)
+        # Update pitch shift to match training
+        out = librosa.effects.pitch_shift(sig, sr=sr, n_steps=6)
         out = out[:len(sig)] if len(out) > len(sig) else np.pad(out, (0, len(sig) - len(out)), mode='reflect')
 
     elif emo == "fearful":
@@ -174,7 +191,8 @@ def enhance(wave, sr, emo_id):
     else:
         out = sig
 
-    enh_nlms = nlms(sig, out, mu=0.5)
+    # Update NLMS parameter to match training
+    enh_nlms = nlms(sig, out, mu=1.0)
     
     return out, enh_nlms
 
@@ -184,16 +202,17 @@ def enhance(wave, sr, emo_id):
 def index():
     return send_from_directory('static', 'index.html')
 
-
 @app.route('/api/process-audio', methods=['POST'])
 def process_audio():
     """Endpoint to process uploaded audio files"""
     if 'file' not in request.files:
+        print("No file part in request")
         return jsonify({'error': 'No file part'}), 400
     
     file = request.files['file']
     
     if file.filename == '':
+        print("No selected file")
         return jsonify({'error': 'No selected file'}), 400
         
     # Create unique filenames
@@ -203,15 +222,27 @@ def process_audio():
     nlms_path = os.path.join(PROCESSED_FOLDER, f"{file_id}_nlms.wav")
     
     try:
-        # Save the uploaded file
+        # Log the file being saved
+        print(f"Saving file to {original_path}")
         file.save(original_path)
         
         # Process the audio
+        print("Predicting emotion...")
         emo_id, wf, sr = predict_emotion(original_path)
-        enhanced, nlms_enhanced = enhance(wf, sr, emo_id)
+        print(f"Emotion detected: {emotion_dict[emo_id]} (ID: {emo_id})")
+        try:
+            print("Enhancing audio...")
+            enhanced, nlms_enhanced = enhance(wf, sr, emo_id)
+        except Exception as e:
+        
+            print(f"Error processing audio: {e}")
+            print(traceback.format_exc())  # Print full traceback
+            return jsonify({'error': str(e)}), 500
         
         # Save processed files
+        print(f"Saving enhanced audio to {enhanced_path}")
         sf.write(enhanced_path, enhanced, sr)
+        print(f"Saving NLMS audio to {nlms_path}")
         sf.write(nlms_path, nlms_enhanced, sr)
         
         # Return results
@@ -222,6 +253,9 @@ def process_audio():
             'nlmsAudio': f"/api/audio/{file_id}_nlms.wav"
         })
     except Exception as e:
+        import traceback
+        print(f"Error processing audio: {e}")
+        print(traceback.format_exc())  # Print full traceback
         return jsonify({'error': str(e)}), 500
 
 
@@ -265,7 +299,8 @@ def record_audio():
 @app.route('/api/audio/<filename>')
 def get_audio(filename):
     """Endpoint to retrieve processed audio files"""
-    if filename.startswith('original'):
+    # Fix: Check the filename pattern properly to determine the directory
+    if "_original.wav" in filename:
         return send_from_directory(UPLOAD_FOLDER, filename)
     else:
         return send_from_directory(PROCESSED_FOLDER, filename)
@@ -273,4 +308,4 @@ def get_audio(filename):
 
 if __name__ == '__main__':
     # Set debug=False in production
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader = False)
